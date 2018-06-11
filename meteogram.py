@@ -128,13 +128,10 @@ DATrain = Dataset(HERE_PATH+"/data/precip.nc")
 lat = DAT.variables["latitude"][:]
 lon = DAT.variables["longitude"][:]
 time = DAT.variables["time"][:]
-n_members = len(DAT.variables["number"][:])
 
 # convert time to datetime objects
 datetime0 = datetime.datetime(1900,1,1)
-dt = datetime.timedelta(hours=0.7)
 dates = [datetime0 + datetime.timedelta(hours=int(t)) for t in time]
-three_hours = datetime.timedelta(hours=3.)
    
 # PICK LOCATION based on geopy
 loc_search = LOC_ARG
@@ -142,7 +139,6 @@ loc_search = LOC_ARG
 geolocator = Nominatim()
 try:
     loc = geolocator.geocode(loc_search)
-    1/0
 except:         # no internet connection or server request failed
     class loc_default:
         latitude = -22.9
@@ -184,8 +180,9 @@ def spline_dates(dates, resolution=SPLINE_RES):
 numdates = date2num(dates)
 
 # temperature
-t_mean = np.mean(t, axis=1)
-tminmax = (t.min(),t.max())
+t = np.sort(t)                  # sort temperature by ensemble members
+t_mean = np.median(t, axis=1)   # ensemble median
+tminmax = (t.min(),t.max())     # used for axis formatting
 t_mean_spline = interp1d(numdates, t_mean, kind='cubic')
 
 # interpolation of data
@@ -203,34 +200,37 @@ mcc_data_spline = spline_data_by_date(mcc)
 hcc_data_spline = spline_data_by_date(hcc)
 
 # calculate precipitation probability
-bins = np.array([min(0,lsp.min()),0.05,0.5,1,max(2,lsp.max())])        # in mm
-
-P = np.empty((len(bins)-1,len(rdates)))                  # probablity per rainfall category
-for i in range(len(rdates)):
-    P[:,i],_ = np.histogram(lsp[i,:],bins)
-
-P = P/n_members
-
-# turn into alpha values
-C0_blue = np.zeros((P.shape[1],4))
-C0_blue[:,0] = 0.12         # RGB values of "C0" matplotlib standard
-C0_blue[:,1] = 0.47
-C0_blue[:,2] = 0.71
-
-C0_lightrain = C0_blue.copy()
-C0_medrain = C0_blue.copy()
-C0_heavyrain = C0_blue.copy()
-
-C0_lightrain[:,3] = P[1,:]
-C0_medrain[:,3] = P[2,:]
-C0_heavyrain[:,3] = P[3,:]
-
-C0_example = C0_blue[:2,:]
-C0_example[:,-1] = [0.2,1.]
-
-dsize = 78
-dstring = (2, 0, 45) #"|" #(1, 0, 45) #"o"
-
+def rain_prob(lsp,color=[0.12,0.47,0.71]):
+    # in mm
+    bins = np.array([min(0,lsp.min()),0.05,0.5,1,max(2,lsp.max())]) 
+    
+    # preallocate probablity per rainfall category
+    P = np.empty((len(bins)-1,len(rdates)))                  
+    for i in range(len(rdates)):
+        P[:,i],_ = np.histogram(lsp[i,:],bins)
+    
+    P = P/lsp.shape[1]  # normalize by number of ensemble members
+    
+    # turn into alpha values
+    colormat = np.zeros((P.shape[1],4))
+    colormat[:,0] = color[0]         # RGB values of "C0" matplotlib standard
+    colormat[:,1] = color[1]
+    colormat[:,2] = color[2]
+    
+    lightrain = colormat.copy()
+    medrain = colormat.copy()
+    heavyrain = colormat.copy()
+    
+    lightrain[:,3] = P[1,:]
+    medrain[:,3] = P[2,:]
+    heavyrain[:,3] = P[3,:]
+    
+    rain_explanation = colormat[:2,:]
+    rain_explanation[:,-1] = [0.2,1.]   # values for example transparency
+    
+    return lightrain,medrain,heavyrain,rain_explanation
+    
+lightrain,medrain,heavyrain,rain_explanation = rain_prob(lsp)
 
 #  axes formatting
 def cloud_ax_format(ax,dates,loc):
@@ -281,9 +281,11 @@ def temp_ax_format(ax,tminmax,dates):
     for m in mondays:
         ax.plot([m,m],[-50,50],"k",lw=0.1)
 #
-def temp_plotter(ax, dates, t_mean_spline, t_data_spline,color='C1',alpha=0.05):
+def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='C1',alpha=0.05):
     
-    #ax.contourf([dates[0],dates[-1]],[0,32],[[0,0],[1,1]],64,cmap="jet")
+    #ax.contourf([dates[0],dates[-1]],[-5,32],[[0,0],[1,1]],128,cmap="jet")
+    #TODO extend to -50degC or so for first colour from colormap, same for the last
+    
     
     numtime = date2num(spline_dates(dates))
     mean = t_mean_spline(numtime)
@@ -291,7 +293,9 @@ def temp_plotter(ax, dates, t_mean_spline, t_data_spline,color='C1',alpha=0.05):
     for i in range(t_data_spline.shape[1]):
         ax.fill_between(numtime,mean,t_data_spline[:,i],facecolor=color,alpha=alpha)  
 
-def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dt,dsize,dstring):
+def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)):
+
+    dt = datetime.timedelta(hours=0.7) #used to shift symbols left/right
 
     # light rain
     rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,linewidths=2,color=lightrain,marker=dstring)
@@ -321,8 +325,8 @@ cloud_ax_format(cloud_ax,dates,loc)
 rain_ax_format(rain_ax,dates)
 temp_ax_format(temp_ax,tminmax,dates)
 
-temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline)
+temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
 add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
-rain_plotter(rain_ax,C0_lightrain,C0_medrain,C0_heavyrain,rdates,dt,dsize,dstring)
+rain_plotter(rain_ax,lightrain,medrain,heavyrain,rdates)
 
 plt.show()
