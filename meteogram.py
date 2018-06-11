@@ -25,7 +25,9 @@ if len(sys.argv) > 1:
     LOC_ARG = sys.argv[1]
 else:
     #LOC_ARG = "Rio de Janeiro Brazil"
-    LOC_ARG = "Hanoi Vietnam"
+    #LOC_ARG = "Hanoi Vietnam"
+    #LOC_ARG = "Hobart Tasmania"
+    LOC_ARG = "Kingston Jamaica"
 
 
 ## FUNCTIONS
@@ -275,19 +277,23 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
 
     ax.xaxis.set_major_locator(DayLocator())                        # major
     ax.xaxis.set_major_formatter(DateFormatter(" %a\n %d %b"))
-    for tick in ax.xaxis.get_majorticklabels():
-        tick.set_horizontalalignment("left")
+    plt.setp(ax.get_xticklabels(), ha="left")
+    #for tick in ax.get_xticklabels():
+    #    print(tick.properties()["text"])
+        #tick.set_horizontalalignment("left")
+    plt.setp(ax.get_xticklabels(), ha="left")
+    #    if tick.get_text()[1:4] in ['Sat','Sun']:
+    #        print(tick)
+    #        tick.set_color("blue")
 
     # remove labels at edges
     ax.get_xticklabels()[-1].set_visible(False)
+    ax.get_xticklabels()[2].set_color("C0") #TODO make automatic
+    ax.get_xticklabels()[3].set_color("C0")
     ax.get_xticklabels(which="minor")[-1].set_visible(False)
     ax.get_xticklabels(which="minor")[0].set_visible(False)
 
-    # add vertical line after each sunday
-    mondays = [datetime.datetime(2018,6,11,0,0)]
-    for m in mondays:
-        ax.plot([m,m],[-50,50],"k",lw=0.1)
-#
+
 def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',alpha=0.1):
     
     # these temperatures will be associated with the lower and upper end of the colormap
