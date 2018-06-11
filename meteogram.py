@@ -16,6 +16,7 @@ from geopy.geocoders import Nominatim
 from sunrise import sun
 from tzwhere import tzwhere
 import pytz
+import warnings
 
 # LOCATION ARGUMENT
 tz = tzwhere.tzwhere()
@@ -25,7 +26,7 @@ if len(sys.argv) > 1:
 else:
     LOC_ARG = "Rio de Janeiro Brazil"
 
-# FUNCTIONS
+## FUNCTIONS
 def find_closest(x,a):
     """ Finds the closest index in x to a given value a."""
     return np.argmin(abs(x-a))
@@ -139,7 +140,17 @@ three_hours = datetime.timedelta(hours=3.)
 loc_search = LOC_ARG
 
 geolocator = Nominatim()
-loc = geolocator.geocode(loc_search)
+try:
+    loc = geolocator.geocode(loc_search)
+    1/0
+except:         # no internet connection or server request failed
+    class loc_default:
+        latitude = -22.9
+        longitude = -43.2
+        address = "Rio de Janeiro, Brazil"
+    
+    loc = loc_default()
+    warnings.warn("Geolocation failed. Use "+loc.address+" instead.")
 
 lati = find_closest(lat,loc.latitude)   # index for given location
 loni = find_closest(lon,convert_longitude(loc.longitude))
@@ -238,6 +249,9 @@ def rain_ax_format(ax,dates):
     ax.text(0.92,0.75,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="left")
     ax.text(0.92,0.5,"very likely",fontsize=8,transform=ax.transAxes,ha="left")
     ax.text(0.92,0.25,"less likely",fontsize=8,transform=ax.transAxes,ha="left")
+    ax.yaxis.set_ticks(np.arange(3))
+    ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
+    
 
 def temp_ax_format(ax,tminmax,dates):
     ax.text(0.01,0.92,sunrise_string(loc,dates[0]),fontsize=10,transform=ax.transAxes)
@@ -267,16 +281,29 @@ def temp_ax_format(ax,tminmax,dates):
     for m in mondays:
         ax.plot([m,m],[-50,50],"k",lw=0.1)
 #
-def temp_plotter(ax, times, mean_spline, data_spline, mean_c='C1', data_c='orange', alpha=0.05):
-    numtime = date2num(spline_dates(times))
-    mean = mean_spline(numtime)
-    data = data_spline
+def temp_plotter(ax, dates, t_mean_spline, t_data_spline,color='C1',alpha=0.05):
+    
+    #ax.contourf([dates[0],dates[-1]],[0,32],[[0,0],[1,1]],64,cmap="jet")
+    
+    numtime = date2num(spline_dates(dates))
+    mean = t_mean_spline(numtime)
 
-    #ax.plot(times, mean, mean_c)
+    for i in range(t_data_spline.shape[1]):
+        ax.fill_between(numtime,mean,t_data_spline[:,i],facecolor=color,alpha=alpha)  
 
-    for i in range(data.shape[1]):
-        ax.fill_between(numtime,mean,data[:,i],facecolor=data_c,alpha=alpha)  
+def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dt,dsize,dstring):
 
+    # light rain
+    rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,linewidths=2,color=lightrain,marker=dstring)
+    
+    # medium rain
+    rain_ax.scatter([d+dt for d in rdates],1.08+np.zeros_like(rdates),dsize,linewidths=2,color=medrain,marker=dstring)
+    rain_ax.scatter([d-dt for d in rdates],0.92+np.zeros_like(rdates),dsize,linewidths=2,color=medrain,marker=dstring)
+    
+    # heavy rain
+    rain_ax.scatter([d+dt+dt for d in rdates],2.15+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
+    rain_ax.scatter([d+dt for d in rdates],2.03+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
+    rain_ax.scatter([d-dt for d in rdates],1.97+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
 
 # PLOTTING
 fig = plt.figure(figsize=(10,4))
@@ -296,21 +323,6 @@ temp_ax_format(temp_ax,tminmax,dates)
 
 temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline)
 add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
-
-
-# light rain
-rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,linewidths=2,color=C0_lightrain,marker=dstring)
-
-# medium rain
-rain_ax.scatter([d+dt for d in rdates],1.08+np.zeros_like(rdates),dsize,linewidths=2,color=C0_medrain,marker=dstring)
-rain_ax.scatter([d-dt for d in rdates],0.92+np.zeros_like(rdates),dsize,linewidths=2,color=C0_medrain,marker=dstring)
-
-# heavy rain
-rain_ax.scatter([d+dt+dt for d in rdates],2.15+np.zeros_like(rdates),dsize,linewidths=2,color=C0_heavyrain,marker=dstring)
-rain_ax.scatter([d+dt for d in rdates],2.03+np.zeros_like(rdates),dsize,linewidths=2,color=C0_heavyrain,marker=dstring)
-rain_ax.scatter([d-dt for d in rdates],1.97+np.zeros_like(rdates),dsize,linewidths=2,color=C0_heavyrain,marker=dstring)
-
-rain_ax.yaxis.set_ticks(np.arange(3))
-rain_ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
+rain_plotter(rain_ax,C0_lightrain,C0_medrain,C0_heavyrain,rdates,dt,dsize,dstring)
 
 plt.show()
