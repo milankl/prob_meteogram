@@ -16,6 +16,7 @@ from geopy.geocoders import Nominatim
 from sunrise import sun
 from tzwhere import tzwhere
 import pytz
+import warnings
 
 # LOCATION ARGUMENT
 tz = tzwhere.tzwhere()
@@ -23,9 +24,11 @@ tz = tzwhere.tzwhere()
 if len(sys.argv) > 1:
     LOC_ARG = sys.argv[1]
 else:
-    LOC_ARG = "Rio de Janeiro Brazil"
+    #LOC_ARG = "Rio de Janeiro Brazil"
+    LOC_ARG = "Hanoi Vietnam"
 
-# FUNCTIONS
+
+## FUNCTIONS
 def find_closest(x,a):
     """ Finds the closest index in x to a given value a."""
     return np.argmin(abs(x-a))
@@ -90,9 +93,8 @@ def timezone_offset(loc,date):
     utcoffset = timezone.utcoffset(date)
     return utcoffset
 
-def sunrise_sunset(loc,date):
-    # find timezone first
-    utcoffset = timezone_offset(loc,date)
+def sunrise_sunset(loc,date,utcoffset):
+
     sunsun = sun(lat=loc.latitude,long=loc.longitude)
     t_sunrise = sunsun.sunrise(when=date)
     t_sunset = sunsun.sunset(when=date)
@@ -107,13 +109,13 @@ def sunrise_sunset(loc,date):
 
     return t_sunrise,t_sunset
 
-def sunrise_string(loc,date):
+def sunrise_string(loc,date,utcoffset):
 
     sunsymb = u"\u263C"
     arrowup = u"\u2191"
     arrowdn = u"\u2193"
 
-    sunrise,sunset = sunrise_sunset(loc,date)
+    sunrise,sunset = sunrise_sunset(loc,date,utcoffset)
     sunrise_str = "{:0=2d}:{:0=2d}".format(sunrise.hour,sunrise.minute)
     sunset_str = "{:0=2d}:{:0=2d}".format(sunset.hour,sunset.minute)
     
@@ -127,29 +129,41 @@ DATrain = Dataset(HERE_PATH+"/data/precip.nc")
 lat = DAT.variables["latitude"][:]
 lon = DAT.variables["longitude"][:]
 time = DAT.variables["time"][:]
-n_members = len(DAT.variables["number"][:])
 
 # convert time to datetime objects
 datetime0 = datetime.datetime(1900,1,1)
-dt = datetime.timedelta(hours=0.7)
 dates = [datetime0 + datetime.timedelta(hours=int(t)) for t in time]
-three_hours = datetime.timedelta(hours=3.)
    
 # PICK LOCATION based on geopy
 loc_search = LOC_ARG
 
 geolocator = Nominatim()
-loc = geolocator.geocode(loc_search)
+try:
+    loc = geolocator.geocode(loc_search)
+except:         # no internet connection or server request failed
+    class loc_default:
+        latitude = -22.9
+        longitude = -43.2
+        address = "Rio de Janeiro, Brazil"
+    
+    loc = loc_default()
+    warnings.warn("Geolocation failed. Use "+loc.address+" instead.")
 
 lati = find_closest(lat,loc.latitude)   # index for given location
 loni = find_closest(lon,convert_longitude(loc.longitude))
 
 # shift dates according to timezone
-utcoffset = timezone_offset(loc,dates[0])
-dates = [d-utcoffset for d in dates]
+try:
+    utcoffset = timezone_offset(loc,dates[0])
+except:
+    warnings.warn("No timezone found. Use UTC instead")
+    utcoffset = datetime.timedelta(0)
+
+dates = [d+utcoffset for d in dates]
 
 # shifted datevector for rain
 rain_left_space = 6
+three_hours = datetime.timedelta(hours=3)
 rdates = [d+three_hours for d in dates[:-rain_left_space]]
 
 # extract data for given location
@@ -173,8 +187,9 @@ def spline_dates(dates, resolution=SPLINE_RES):
 numdates = date2num(dates)
 
 # temperature
-t_mean = np.mean(t, axis=1)
-tminmax = (t.min(),t.max())
+t = np.sort(t)                  # sort temperature by ensemble members
+t_mean = np.median(t, axis=1)   # ensemble median
+tminmax = (t.min(),t.max())     # used for axis formatting
 t_mean_spline = interp1d(numdates, t_mean, kind='cubic')
 
 # interpolation of data
@@ -192,34 +207,37 @@ mcc_data_spline = spline_data_by_date(mcc)
 hcc_data_spline = spline_data_by_date(hcc)
 
 # calculate precipitation probability
-bins = np.array([min(0,lsp.min()),0.05,0.5,1,max(2,lsp.max())])        # in mm
-
-P = np.empty((len(bins)-1,len(rdates)))                  # probablity per rainfall category
-for i in range(len(rdates)):
-    P[:,i],_ = np.histogram(lsp[i,:],bins)
-
-P = P/n_members
-
-# turn into alpha values
-C0_blue = np.zeros((P.shape[1],4))
-C0_blue[:,0] = 0.12         # RGB values of "C0" matplotlib standard
-C0_blue[:,1] = 0.47
-C0_blue[:,2] = 0.71
-
-C0_lightrain = C0_blue.copy()
-C0_medrain = C0_blue.copy()
-C0_heavyrain = C0_blue.copy()
-
-C0_lightrain[:,3] = P[1,:]
-C0_medrain[:,3] = P[2,:]
-C0_heavyrain[:,3] = P[3,:]
-
-C0_example = C0_blue[:2,:]
-C0_example[:,-1] = [0.2,1.]
-
-dsize = 78
-dstring = (2, 0, 45) #"|" #(1, 0, 45) #"o"
-
+def rain_prob(lsp,color=[0.12,0.47,0.71]):
+    # in mm
+    bins = np.array([min(0,lsp.min()),0.05,0.5,1,max(2,lsp.max())]) 
+    
+    # preallocate probablity per rainfall category
+    P = np.empty((len(bins)-1,len(rdates)))                  
+    for i in range(len(rdates)):
+        P[:,i],_ = np.histogram(lsp[i,:],bins)
+    
+    P = P/lsp.shape[1]  # normalize by number of ensemble members
+    
+    # turn into alpha values
+    colormat = np.zeros((P.shape[1],4))
+    colormat[:,0] = color[0]         # RGB values of "C0" matplotlib standard
+    colormat[:,1] = color[1]
+    colormat[:,2] = color[2]
+    
+    lightrain = colormat.copy()
+    medrain = colormat.copy()
+    heavyrain = colormat.copy()
+    
+    lightrain[:,3] = P[1,:]
+    medrain[:,3] = P[2,:]
+    heavyrain[:,3] = P[3,:]
+    
+    rain_explanation = colormat[:2,:]
+    rain_explanation[:,-1] = [0.2,1.]   # values for example transparency
+    
+    return lightrain,medrain,heavyrain,rain_explanation
+    
+lightrain,medrain,heavyrain,rain_explanation = rain_prob(lsp)
 
 #  axes formatting
 def cloud_ax_format(ax,dates,loc):
@@ -228,19 +246,22 @@ def cloud_ax_format(ax,dates,loc):
     ax.set_xticks([])
     ax.set_yticks([])
 
-def rain_ax_format(ax,dates):
+def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
     ax.set_xlim(dates[0],dates[-1])
     ax.set_ylim(-0.5,2.5)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.plot([0.88,0.88],[-1,3],transform=ax.transAxes,alpha=.5,lw=0.5)
-    ax.scatter([0.9,0.9],[0.3,0.55],dsize,linewidths=2,color=C0_example,transform=ax.transAxes,marker=dstring)
+    ax.scatter([0.9,0.9],[0.3,0.55],dsize,linewidths=2,color=rain_explanation,transform=ax.transAxes,marker=dstring)
     ax.text(0.92,0.75,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="left")
     ax.text(0.92,0.5,"very likely",fontsize=8,transform=ax.transAxes,ha="left")
     ax.text(0.92,0.25,"less likely",fontsize=8,transform=ax.transAxes,ha="left")
+    ax.yaxis.set_ticks(np.arange(3))
+    ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
+    
 
-def temp_ax_format(ax,tminmax,dates):
-    ax.text(0.01,0.92,sunrise_string(loc,dates[0]),fontsize=10,transform=ax.transAxes)
+def temp_ax_format(ax,tminmax,dates,utcoffset):
+    ax.text(0.01,0.92,sunrise_string(loc,dates[0],utcoffset),fontsize=10,transform=ax.transAxes)
     ax.set_yticks(np.arange(np.round(tminmax[0])-3,np.round(tminmax[1])+3,3))
     ax.set_ylim(np.round(tminmax[0])-3,np.round(tminmax[1])+3)
     ax.yaxis.set_major_formatter(FormatStrFormatter('%d'+u'\N{DEGREE SIGN}'+'C'))
@@ -267,16 +288,59 @@ def temp_ax_format(ax,tminmax,dates):
     for m in mondays:
         ax.plot([m,m],[-50,50],"k",lw=0.1)
 #
-def temp_plotter(ax, times, mean_spline, data_spline, mean_c='C1', data_c='orange', alpha=0.05):
-    numtime = date2num(spline_dates(times))
-    mean = mean_spline(numtime)
-    data = data_spline
+def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',alpha=0.1):
+    
+    # these temperatures will be associated with the lower and upper end of the colormap
+    clev = [-5,32]
+    tmin,tmax = (-100,100)   # absurdly low and high temperatures  
+    cmap = "jet"
+    cmat = [[clev[0],clev[0]],[clev[1],clev[1]]]
+    cmat_high = clev[1]*np.ones((2,2))
+    cmat_low = clev[0]*np.ones((2,2))
+    
+    ax.contourf([dates[0],dates[-1]],clev,cmat,128,cmap=cmap)
+    ax.contourf([dates[0],dates[-1]],[clev[1],tmax],cmat_high,128,vmin=clev[0],vmax=clev[1],cmap=cmap)
+    
+    
+    #TODO extend to -50degC or so for first colour from colormap, same for the last
+    
+    
+    numtime = date2num(spline_dates(dates))
+    mean = t_mean_spline(numtime)
+    
+    #TODO compare to 1std, 2std whether luminace data is representative
+    
+    n_tsteps = len(numtime)
+    n_ens_members = t_data_spline.shape[1]
+    ylim = ax.get_ylim()
+    
+    # plot first half of ensemble members from the bottom, the first without transparency
+    ax.fill_between(numtime,ylim[0]*np.ones(n_tsteps),t_data_spline[:,0],facecolor=color,alpha=1.)
+    for i in range(1,n_ens_members//2):
+        ax.fill_between(numtime,ylim[0]*np.ones(n_tsteps),t_data_spline[:,i],facecolor=color,alpha=alpha)
+    
+    # and the second half from the top, the last without transparency
+    for i in range(n_ens_members//2,n_ens_members):
+        ax.fill_between(numtime,t_data_spline[:,i],ylim[1]*np.ones(n_tsteps),facecolor=color,alpha=alpha)
+ 
+    ax.fill_between(numtime,t_data_spline[:,-1],ylim[1]*np.ones(n_tsteps),facecolor=color,alpha=1.)
+    
 
-    #ax.plot(times, mean, mean_c)
+def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)):
 
-    for i in range(data.shape[1]):
-        ax.fill_between(numtime,mean,data[:,i],facecolor=data_c,alpha=alpha)  
+    dt = datetime.timedelta(hours=0.7) #used to shift symbols left/right
 
+    # light rain
+    rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,linewidths=2,color=lightrain,marker=dstring)
+    
+    # medium rain
+    rain_ax.scatter([d+dt for d in rdates],1.08+np.zeros_like(rdates),dsize,linewidths=2,color=medrain,marker=dstring)
+    rain_ax.scatter([d-dt for d in rdates],0.92+np.zeros_like(rdates),dsize,linewidths=2,color=medrain,marker=dstring)
+    
+    # heavy rain
+    rain_ax.scatter([d+dt+dt for d in rdates],2.15+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
+    rain_ax.scatter([d+dt for d in rdates],2.03+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
+    rain_ax.scatter([d-dt for d in rdates],1.97+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
 
 # PLOTTING
 fig = plt.figure(figsize=(10,4))
@@ -291,26 +355,11 @@ plt.tight_layout(rect=[0.02,.03,1,0.97])
 
 # do axes formatting
 cloud_ax_format(cloud_ax,dates,loc)
-rain_ax_format(rain_ax,dates)
-temp_ax_format(temp_ax,tminmax,dates)
+rain_ax_format(rain_ax,dates,rain_explanation)
+temp_ax_format(temp_ax,tminmax,dates,utcoffset)
 
-temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline)
+temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
 add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
-
-
-# light rain
-rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,linewidths=2,color=C0_lightrain,marker=dstring)
-
-# medium rain
-rain_ax.scatter([d+dt for d in rdates],1.08+np.zeros_like(rdates),dsize,linewidths=2,color=C0_medrain,marker=dstring)
-rain_ax.scatter([d-dt for d in rdates],0.92+np.zeros_like(rdates),dsize,linewidths=2,color=C0_medrain,marker=dstring)
-
-# heavy rain
-rain_ax.scatter([d+dt+dt for d in rdates],2.15+np.zeros_like(rdates),dsize,linewidths=2,color=C0_heavyrain,marker=dstring)
-rain_ax.scatter([d+dt for d in rdates],2.03+np.zeros_like(rdates),dsize,linewidths=2,color=C0_heavyrain,marker=dstring)
-rain_ax.scatter([d-dt for d in rdates],1.97+np.zeros_like(rdates),dsize,linewidths=2,color=C0_heavyrain,marker=dstring)
-
-rain_ax.yaxis.set_ticks(np.arange(3))
-rain_ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
+rain_plotter(rain_ax,lightrain,medrain,heavyrain,rdates)
 
 plt.show()
