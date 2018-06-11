@@ -24,7 +24,9 @@ tz = tzwhere.tzwhere()
 if len(sys.argv) > 1:
     LOC_ARG = sys.argv[1]
 else:
-    LOC_ARG = "Rio de Janeiro Brazil"
+    #LOC_ARG = "Rio de Janeiro Brazil"
+    LOC_ARG = "Hanoi Vietnam"
+
 
 ## FUNCTIONS
 def find_closest(x,a):
@@ -91,9 +93,8 @@ def timezone_offset(loc,date):
     utcoffset = timezone.utcoffset(date)
     return utcoffset
 
-def sunrise_sunset(loc,date):
-    # find timezone first
-    utcoffset = timezone_offset(loc,date)
+def sunrise_sunset(loc,date,utcoffset):
+
     sunsun = sun(lat=loc.latitude,long=loc.longitude)
     t_sunrise = sunsun.sunrise(when=date)
     t_sunset = sunsun.sunset(when=date)
@@ -108,13 +109,13 @@ def sunrise_sunset(loc,date):
 
     return t_sunrise,t_sunset
 
-def sunrise_string(loc,date):
+def sunrise_string(loc,date,utcoffset):
 
     sunsymb = u"\u263C"
     arrowup = u"\u2191"
     arrowdn = u"\u2193"
 
-    sunrise,sunset = sunrise_sunset(loc,date)
+    sunrise,sunset = sunrise_sunset(loc,date,utcoffset)
     sunrise_str = "{:0=2d}:{:0=2d}".format(sunrise.hour,sunrise.minute)
     sunset_str = "{:0=2d}:{:0=2d}".format(sunset.hour,sunset.minute)
     
@@ -152,11 +153,17 @@ lati = find_closest(lat,loc.latitude)   # index for given location
 loni = find_closest(lon,convert_longitude(loc.longitude))
 
 # shift dates according to timezone
-utcoffset = timezone_offset(loc,dates[0])
-dates = [d-utcoffset for d in dates]
+try:
+    utcoffset = timezone_offset(loc,dates[0])
+except:
+    warnings.warn("No timezone found. Use UTC instead")
+    utcoffset = datetime.timedelta(0)
+
+dates = [d+utcoffset for d in dates]
 
 # shifted datevector for rain
 rain_left_space = 6
+three_hours = datetime.timedelta(hours=3)
 rdates = [d+three_hours for d in dates[:-rain_left_space]]
 
 # extract data for given location
@@ -239,13 +246,13 @@ def cloud_ax_format(ax,dates,loc):
     ax.set_xticks([])
     ax.set_yticks([])
 
-def rain_ax_format(ax,dates):
+def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
     ax.set_xlim(dates[0],dates[-1])
     ax.set_ylim(-0.5,2.5)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.plot([0.88,0.88],[-1,3],transform=ax.transAxes,alpha=.5,lw=0.5)
-    ax.scatter([0.9,0.9],[0.3,0.55],dsize,linewidths=2,color=C0_example,transform=ax.transAxes,marker=dstring)
+    ax.scatter([0.9,0.9],[0.3,0.55],dsize,linewidths=2,color=rain_explanation,transform=ax.transAxes,marker=dstring)
     ax.text(0.92,0.75,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="left")
     ax.text(0.92,0.5,"very likely",fontsize=8,transform=ax.transAxes,ha="left")
     ax.text(0.92,0.25,"less likely",fontsize=8,transform=ax.transAxes,ha="left")
@@ -253,8 +260,8 @@ def rain_ax_format(ax,dates):
     ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
     
 
-def temp_ax_format(ax,tminmax,dates):
-    ax.text(0.01,0.92,sunrise_string(loc,dates[0]),fontsize=10,transform=ax.transAxes)
+def temp_ax_format(ax,tminmax,dates,utcoffset):
+    ax.text(0.01,0.92,sunrise_string(loc,dates[0],utcoffset),fontsize=10,transform=ax.transAxes)
     ax.set_yticks(np.arange(np.round(tminmax[0])-3,np.round(tminmax[1])+3,3))
     ax.set_ylim(np.round(tminmax[0])-3,np.round(tminmax[1])+3)
     ax.yaxis.set_major_formatter(FormatStrFormatter('%d'+u'\N{DEGREE SIGN}'+'C'))
@@ -281,17 +288,43 @@ def temp_ax_format(ax,tminmax,dates):
     for m in mondays:
         ax.plot([m,m],[-50,50],"k",lw=0.1)
 #
-def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='C1',alpha=0.05):
+def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',alpha=0.1):
     
-    #ax.contourf([dates[0],dates[-1]],[-5,32],[[0,0],[1,1]],128,cmap="jet")
+    # these temperatures will be associated with the lower and upper end of the colormap
+    clev = [-5,32]
+    tmin,tmax = (-100,100)   # absurdly low and high temperatures  
+    cmap = "jet"
+    cmat = [[clev[0],clev[0]],[clev[1],clev[1]]]
+    cmat_high = clev[1]*np.ones((2,2))
+    cmat_low = clev[0]*np.ones((2,2))
+    
+    ax.contourf([dates[0],dates[-1]],clev,cmat,128,cmap=cmap)
+    ax.contourf([dates[0],dates[-1]],[clev[1],tmax],cmat_high,128,vmin=clev[0],vmax=clev[1],cmap=cmap)
+    
+    
     #TODO extend to -50degC or so for first colour from colormap, same for the last
     
     
     numtime = date2num(spline_dates(dates))
     mean = t_mean_spline(numtime)
-
-    for i in range(t_data_spline.shape[1]):
-        ax.fill_between(numtime,mean,t_data_spline[:,i],facecolor=color,alpha=alpha)  
+    
+    #TODO compare to 1std, 2std whether luminace data is representative
+    
+    n_tsteps = len(numtime)
+    n_ens_members = t_data_spline.shape[1]
+    ylim = ax.get_ylim()
+    
+    # plot first half of ensemble members from the bottom, the first without transparency
+    ax.fill_between(numtime,ylim[0]*np.ones(n_tsteps),t_data_spline[:,0],facecolor=color,alpha=1.)
+    for i in range(1,n_ens_members//2):
+        ax.fill_between(numtime,ylim[0]*np.ones(n_tsteps),t_data_spline[:,i],facecolor=color,alpha=alpha)
+    
+    # and the second half from the top, the last without transparency
+    for i in range(n_ens_members//2,n_ens_members):
+        ax.fill_between(numtime,t_data_spline[:,i],ylim[1]*np.ones(n_tsteps),facecolor=color,alpha=alpha)
+ 
+    ax.fill_between(numtime,t_data_spline[:,-1],ylim[1]*np.ones(n_tsteps),facecolor=color,alpha=1.)
+    
 
 def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)):
 
@@ -322,8 +355,8 @@ plt.tight_layout(rect=[0.02,.03,1,0.97])
 
 # do axes formatting
 cloud_ax_format(cloud_ax,dates,loc)
-rain_ax_format(rain_ax,dates)
-temp_ax_format(temp_ax,tminmax,dates)
+rain_ax_format(rain_ax,dates,rain_explanation)
+temp_ax_format(temp_ax,tminmax,dates,utcoffset)
 
 temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
 add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
