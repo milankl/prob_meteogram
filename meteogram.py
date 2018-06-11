@@ -307,9 +307,6 @@ def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',
     ax.contourf([dates[0],dates[-1]],[clev[1],tmax],cmat_high,128,vmin=clev[0],vmax=clev[1],cmap=cmap)
     ax.contourf([dates[0],dates[-1]],[tmin,clev[0]],cmat_low,128,vmin=clev[0],vmax=clev[1],cmap=cmap)
     
-    #TODO extend to -50degC or so for first colour from colormap, same for the last
-    
-    
     numtime = date2num(spline_dates(dates))
     mean = t_mean_spline(numtime)
     
