@@ -23,9 +23,10 @@ tz = tzwhere.tzwhere()
 
 if len(sys.argv) > 1:
     LOC_ARG = sys.argv[1]
+    OUTPUT = sys.argv[2]
 else:
-    #LOC_ARG = "Rio de Janeiro Brazil"
-    LOC_ARG = "Hanoi Vietnam"
+    LOC_ARG = "Rio de Janeiro Brazil"
+    OUTPUT = 0
 
 
 ## FUNCTIONS
@@ -362,4 +363,8 @@ temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
 add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
 rain_plotter(rain_ax,lightrain,medrain,heavyrain,rdates)
 
-plt.show()
+if OUTPUT:
+    plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".png",dpi=150)
+    plt.close(fig)
+else:
+    plt.show()
