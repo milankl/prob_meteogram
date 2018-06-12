@@ -17,6 +17,7 @@ from sunrise import sun
 from tzwhere import tzwhere
 import pytz
 import warnings
+from droplet import droplet
 
 # LOCATION ARGUMENT
 tz = tzwhere.tzwhere()
@@ -253,7 +254,7 @@ def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
     ax.set_xticks([])
     ax.set_yticks([])
     ax.plot([0.88,0.88],[-1,3],transform=ax.transAxes,alpha=.5,lw=0.5)
-    ax.scatter([0.9,0.9],[0.3,0.55],dsize,linewidths=2,color=rain_explanation,transform=ax.transAxes,marker=dstring)
+    ax.scatter([0.9,0.9],[0.3,0.55],dsize,color=rain_explanation,transform=ax.transAxes,marker=droplet(rot=-30))
     ax.text(0.92,0.75,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="left")
     ax.text(0.92,0.5,"very likely",fontsize=8,transform=ax.transAxes,ha="left")
     ax.text(0.92,0.25,"less likely",fontsize=8,transform=ax.transAxes,ha="left")
@@ -277,16 +278,12 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
     ax.xaxis.set_major_locator(DayLocator())                        # major
     ax.xaxis.set_major_formatter(DateFormatter(" %a\n %d %b"))
     plt.setp(ax.get_xticklabels(), ha="left")
-    #for tick in ax.get_xticklabels():
-    #    print(tick.properties()["text"])
-        #tick.set_horizontalalignment("left")
     plt.setp(ax.get_xticklabels(), ha="left")
-    #    if tick.get_text()[1:4] in ['Sat','Sun']:
-    #        print(tick)
-    #        tick.set_color("blue")
 
     # remove labels at edges
-    ax.get_xticklabels()[-1].set_visible(False)
+    if dates[-1].hour < 13:     # remove only if there is not enough space
+        ax.get_xticklabels()[-1].set_visible(False)
+    
     ax.get_xticklabels()[2].set_color("C0") #TODO make automatic
     ax.get_xticklabels()[3].set_color("C0")
     ax.get_xticklabels(which="minor")[-1].set_visible(False)
@@ -330,19 +327,20 @@ def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',
 
 def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)):
 
-    dt = datetime.timedelta(hours=0.7) #used to shift symbols left/right
+    dt = datetime.timedelta(hours=0.9) #used to shift symbols left/right
+    dropletpath = droplet(rot=-30)
 
     # light rain
-    rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,linewidths=2,color=lightrain,marker=dstring)
+    rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,color=lightrain,marker=dropletpath)
     
     # medium rain
-    rain_ax.scatter([d+dt for d in rdates],1.08+np.zeros_like(rdates),dsize,linewidths=2,color=medrain,marker=dstring)
-    rain_ax.scatter([d-dt for d in rdates],0.92+np.zeros_like(rdates),dsize,linewidths=2,color=medrain,marker=dstring)
+    rain_ax.scatter([d+dt for d in rdates],1.05+np.zeros_like(rdates),dsize,color=medrain,marker=dropletpath)
+    rain_ax.scatter([d-dt for d in rdates],0.95+np.zeros_like(rdates),dsize,color=medrain,marker=dropletpath)
     
     # heavy rain
-    rain_ax.scatter([d+dt+dt for d in rdates],2.15+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
-    rain_ax.scatter([d+dt for d in rdates],2.03+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
-    rain_ax.scatter([d-dt for d in rdates],1.97+np.zeros_like(rdates),dsize,linewidths=2,color=heavyrain,marker=dstring)
+    rain_ax.scatter([d for d in rdates],2.1+np.zeros_like(rdates),dsize,color=heavyrain,marker=dropletpath)
+    rain_ax.scatter([d+dt for d in rdates],1.87+np.zeros_like(rdates),dsize,color=heavyrain,marker=dropletpath)
+    rain_ax.scatter([d-2.2*dt for d in rdates],1.95+np.zeros_like(rdates),dsize,color=heavyrain,marker=dropletpath)
 
 # PLOTTING
 fig = plt.figure(figsize=(10,4))
