@@ -4,7 +4,7 @@ sys.path.append(HERE_PATH)
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.dates import DayLocator, HourLocator, DateFormatter, drange, date2num, num2date
+from matplotlib.dates import WeekdayLocator, DayLocator, HourLocator, DateFormatter, drange, date2num, num2date
 from netCDF4 import Dataset
 from matplotlib.ticker import FormatStrFormatter
 import datetime
@@ -275,17 +275,28 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
     ax.get_xaxis().set_tick_params(which='minor', direction='in',pad=-10,labelsize=6)
     ax.grid(alpha=0.15)
 
-    ax.xaxis.set_major_locator(DayLocator())                        # major
+    # major weekdays not weekend in black
+    ax.xaxis.set_major_locator(WeekdayLocator(byweekday=range(5)))
     ax.xaxis.set_major_formatter(DateFormatter(" %a\n %d %b"))
     plt.setp(ax.get_xticklabels(), ha="left")
-    plt.setp(ax.get_xticklabels(), ha="left")
-
+    
+    # major weekends in blue
+    ax_weekend = ax.twiny()                             
+    ax_weekend.set_xlim(dates[0],dates[-1])
+    ax_weekend.xaxis.set_major_locator(WeekdayLocator(byweekday=[5,6]))
+    ax_weekend.xaxis.set_major_formatter(DateFormatter(" %a\n %d %b"))
+    ax_weekend.xaxis.tick_bottom()
+    plt.setp(ax_weekend.get_xticklabels(), ha="left", color="C0")
+    
     # remove labels at edges
     if dates[-1].hour < 13:     # remove only if there is not enough space
-        ax.get_xticklabels()[-1].set_visible(False)
+        if dates[-1].weekday() > 4:     # weekend 
+            ax_weekend.get_xticklabels()[-1].set_visible(False)
+        else:   # during the week
+            ax.get_xticklabels()[-1].set_visible(False)
     
-    ax.get_xticklabels()[2].set_color("C0") #TODO make automatic
-    ax.get_xticklabels()[3].set_color("C0")
+    #ax.get_xticklabels()[2].set_color("C0") #TODO make automatic
+    #ax.get_xticklabels()[3].set_color("C0")
     ax.get_xticklabels(which="minor")[-1].set_visible(False)
     ax.get_xticklabels(which="minor")[0].set_visible(False)
 
