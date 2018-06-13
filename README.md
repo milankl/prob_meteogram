@@ -25,6 +25,6 @@ This script will create a probabilistc meteogram for a given city or location. W
     
 to create a meteogram for Rio de Janeiro, Brazil. You can also do
 
-    python meteogram.py "ECMWF Reading"
+    python meteogram.py "ECMWF Reading" 1
 
-and specify your own location.
+and specify your own location and whether you want an .png output with 1 or 0.
