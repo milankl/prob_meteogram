@@ -10,7 +10,7 @@ from matplotlib.ticker import FormatStrFormatter
 import datetime
 from matplotlib import gridspec
 from scipy.interpolate import interp1d
-from matplotlib.patches import Circle, Ellipse
+from matplotlib.patches import Circle, Ellipse, Rectangle
 from matplotlib.collections import PatchCollection
 from geopy.geocoders import Nominatim
 from sunrise import sun
@@ -18,6 +18,7 @@ from tzwhere import tzwhere
 import pytz
 import warnings
 from droplet import droplet
+from wind_sock import wind_sock
 
 # LOCATION ARGUMENT
 tz = tzwhere.tzwhere()
@@ -164,9 +165,8 @@ except:
 dates = [d+utcoffset for d in dates]
 
 # shifted datevector for rain
-rain_left_space = 6
 three_hours = datetime.timedelta(hours=3)
-rdates = [d+three_hours for d in dates[:-rain_left_space]]
+rdates = [d+three_hours for d in dates[:-1]]
 
 # extract data for given location
 t = DAT.variables["t2m"][:,:,lati,loni]-273.15      # Kelvin to degC
@@ -175,7 +175,7 @@ v = DAT.variables["v10"][:,:,lati,loni]
 lcc = DAT.variables["lcc"][:,:,lati,loni]
 mcc = DAT.variables["mcc"][:,:,lati,loni]
 hcc = DAT.variables["hcc"][:,:,lati,loni]
-lsp = DATrain.variables["lsp"][:,:,lati,loni]*1e4       # only large-scale precip
+lsp = DATrain.variables["lsp"][:,:,lati,loni]*1e4       # only large-scale precip...
 
 # smooth and mean data
 SPLINE_RES = 360
@@ -233,13 +233,48 @@ def rain_prob(lsp,color=[0.12,0.47,0.71]):
     lightrain[:,3] = P[1,:]
     medrain[:,3] = P[2,:]
     heavyrain[:,3] = P[3,:]
-    
+        
     rain_explanation = colormat[:2,:]
     rain_explanation[:,-1] = [0.2,1.]   # values for example transparency
     
     return lightrain,medrain,heavyrain,rain_explanation
     
 lightrain,medrain,heavyrain,rain_explanation = rain_prob(lsp)
+
+# wind speed
+spd = np.sqrt(u**2 + v**2)
+
+def storm(spd):
+    threshold1 = 8.     # m/s   5 Beaufort 
+    threshold2 = 10.7   # 6 Beaufort
+    threshold3 = 13.8   # 7 Beaufort
+    
+    p_storm = np.mean(spd >= threshold1,axis=1)
+    
+    s_storm = np.zeros_like(p_storm)
+    for i,s in enumerate(spd):
+        st = s >= threshold1
+        if np.sum(st):
+            s_storm[i] = np.median(s[st])
+    
+    storm_strength = np.zeros((3,s_storm.shape[0]))
+    storm_strength[0,:] = 1.*(np.logical_and(s_storm >= threshold1,s_storm < threshold2))
+    storm_strength[1,:] = 1.*(np.logical_and(s_storm >= threshold2,s_storm < threshold3))
+    storm_strength[2,:] = 1.*(s_storm >= threshold3)
+     
+    color=[0.71,0.12,0.12]
+    
+    # turn into alpha values
+    colormat = np.zeros((p_storm.shape[0],4))
+    colormat[:,0] = color[0]         # RGB values of "C0" matplotlib standard
+    colormat[:,1] = color[1]
+    colormat[:,2] = color[2]
+    
+    colormat[:,3] = p_storm
+    
+    return colormat,storm_strength.astype(np.bool)
+
+p_storm,storm_strength = storm(spd)
 
 #  axes formatting
 def cloud_ax_format(ax,dates,loc):
@@ -251,15 +286,30 @@ def cloud_ax_format(ax,dates,loc):
 def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
     ax.set_xlim(dates[0],dates[-1])
     ax.set_ylim(-0.5,2.5)
-    ax.set_xticks([])
     ax.set_yticks([])
-    ax.plot([0.88,0.88],[-1,3],transform=ax.transAxes,alpha=.5,lw=0.5)
-    ax.scatter([0.9,0.9],[0.3,0.55],dsize,color=rain_explanation,transform=ax.transAxes,marker=droplet(rot=-30))
-    ax.text(0.92,0.75,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="left")
-    ax.text(0.92,0.5,"very likely",fontsize=8,transform=ax.transAxes,ha="left")
-    ax.text(0.92,0.25,"less likely",fontsize=8,transform=ax.transAxes,ha="left")
-    ax.yaxis.set_ticks(np.arange(3))
-    ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
+    #ax.xaxis.grid(alpha=0.2)
+    #ax.xaxis.set_major_locator(WeekdayLocator(byweekday=range(7)))
+    #ax.set_xticklabels([])
+    ax.xaxis.set_minor_locator(HourLocator(np.arange(0, 25, 6)))    # minor
+    ax.xaxis.set_major_locator(WeekdayLocator(byweekday=range(5)))
+    ax.get_xaxis().set_tick_params(which='minor', direction='in')
+    ax.get_xaxis().set_tick_params(which='major', direction='in')
+    ax.set_xticklabels([])
+    
+    bg_rect = Rectangle((0.84,0),0.16,1.,linewidth=.3,edgecolor='k',facecolor='w',transform=ax.transAxes,zorder=2)
+    ax.add_patch(bg_rect)
+    
+    ax.scatter([0.92,0.92],[0.25,0.5],dsize,color=rain_explanation,transform=ax.transAxes,marker=droplet(rot=-30),zorder=3)
+    ax.text(0.93,0.70,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="left")
+    ax.text(0.93,0.45,"very likely",fontsize=8,transform=ax.transAxes,ha="left")
+    ax.text(0.93,0.2,"less likely",fontsize=8,transform=ax.transAxes,ha="left")
+    
+    ax.text(0.84,0.75,"- heavy",fontsize=8,transform=ax.transAxes,ha="left")
+    ax.text(0.84,0.43,"- medium",fontsize=8,transform=ax.transAxes,ha="left")
+    ax.text(0.84,0.11,"- light",fontsize=8,transform=ax.transAxes,ha="left")
+    
+    #ax.yaxis.set_ticks(np.arange(3))
+    #ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
     
 
 def temp_ax_format(ax,tminmax,dates,utcoffset):
@@ -273,7 +323,7 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
     ax.xaxis.set_minor_locator(HourLocator(np.arange(0, 25, 6)))    # minor
     ax.xaxis.set_minor_formatter(DateFormatter("%Hh"))
     ax.get_xaxis().set_tick_params(which='minor', direction='in',pad=-10,labelsize=6)
-    ax.grid(alpha=0.15)
+    ax.grid(alpha=0.2)
 
     # major weekdays not weekend in black
     ax.xaxis.set_major_locator(WeekdayLocator(byweekday=range(5)))
@@ -287,6 +337,7 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
     ax_weekend.xaxis.set_major_formatter(DateFormatter(" %a\n %d %b"))
     ax_weekend.xaxis.tick_bottom()
     plt.setp(ax_weekend.get_xticklabels(), ha="left", color="C0")
+    ax_weekend.grid(alpha=0.2)
     
     # remove labels at edges
     if dates[-1].hour < 13:     # remove only if there is not enough space
@@ -300,8 +351,18 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
     ax.get_xticklabels(which="minor")[-1].set_visible(False)
     ax.get_xticklabels(which="minor")[0].set_visible(False)
 
+def wind_ax_format(ax,dates):
+    ax.set_xlim(dates[0],dates[-1])
+    ax.set_ylim(0.2,2.5)
+    ax.set_yticks([])
+    # ax.xaxis.set_minor_locator(HourLocator(np.arange(0, 25, 6)))    # minor
+    # ax.xaxis.set_major_locator(WeekdayLocator(byweekday=range(5)))
+    # ax.get_xaxis().set_tick_params(which='minor', direction='in')
+    # ax.get_xaxis().set_tick_params(which='major', direction='in')
+    ax.set_xticklabels([])
 
-def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',alpha=0.1):
+
+def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',alpha=0.09):
     
     # these temperatures will be associated with the lower and upper end of the colormap
     clev = [-5,32]
@@ -342,25 +403,42 @@ def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)
     dropletpath = droplet(rot=-30)
 
     # light rain
-    rain_ax.scatter(rdates,np.zeros_like(rdates),dsize,color=lightrain,marker=dropletpath)
+    rain_ax.scatter([d for d in rdates],np.zeros_like(rdates),dsize*0.9,color=lightrain,marker=dropletpath)
     
     # medium rain
     rain_ax.scatter([d+dt for d in rdates],1.05+np.zeros_like(rdates),dsize,color=medrain,marker=dropletpath)
     rain_ax.scatter([d-dt for d in rdates],0.95+np.zeros_like(rdates),dsize,color=medrain,marker=dropletpath)
     
     # heavy rain
-    rain_ax.scatter([d for d in rdates],2.1+np.zeros_like(rdates),dsize,color=heavyrain,marker=dropletpath)
-    rain_ax.scatter([d+dt for d in rdates],1.87+np.zeros_like(rdates),dsize,color=heavyrain,marker=dropletpath)
-    rain_ax.scatter([d-2.2*dt for d in rdates],1.95+np.zeros_like(rdates),dsize,color=heavyrain,marker=dropletpath)
+    rain_ax.scatter([d for d in rdates],2.1+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
+    rain_ax.scatter([d+dt for d in rdates],1.87+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
+    rain_ax.scatter([d-2.2*dt for d in rdates],1.95+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
 
+def wind_plotter(ax,dates,p_storm,storm_strength):
+    
+    windsock_weak = wind_sock(rot=60)
+    windsock_medi = wind_sock(rot=75)
+    windsock_stro = wind_sock(rot=90)
+    
+    q0,q1,q2 = storm_strength       # for readability
+    
+    ax.scatter([d for q,d in zip(q0,dates) if q],np.ones_like(dates)[q0],400,color=p_storm[q0,:],marker=windsock_weak)
+    ax.scatter([d for q,d in zip(q1,dates) if q],np.ones_like(dates)[q1],400,color=p_storm[q1,:],marker=windsock_medi)
+    ax.scatter([d for q,d in zip(q2,dates) if q],np.ones_like(dates)[q2],400,color=p_storm[q2,:],marker=windsock_stro)
+    
+    if np.sum(storm_strength) == 0:
+        ax.text(0.995,0.05,"no strong winds expected",fontsize=8,transform=ax.transAxes,ha="right")
+    
+    
 # PLOTTING
 fig = plt.figure(figsize=(10,4))
 
 # subplots adjust
-all_ax = gridspec.GridSpec(3, 1, height_ratios=[1,2,6],hspace=0)
+all_ax = gridspec.GridSpec(4, 1, height_ratios=[1,2,1,6],hspace=0)
 cloud_ax = plt.subplot(all_ax[0])
 rain_ax = plt.subplot(all_ax[1])
-temp_ax = plt.subplot(all_ax[2])
+wind_ax = plt.subplot(all_ax[2])
+temp_ax = plt.subplot(all_ax[3])
 
 plt.tight_layout(rect=[0.02,.03,1,0.97])
 
@@ -368,10 +446,12 @@ plt.tight_layout(rect=[0.02,.03,1,0.97])
 cloud_ax_format(cloud_ax,dates,loc)
 rain_ax_format(rain_ax,dates,rain_explanation)
 temp_ax_format(temp_ax,tminmax,dates,utcoffset)
+wind_ax_format(wind_ax,dates)
 
 temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
 add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
 rain_plotter(rain_ax,lightrain,medrain,heavyrain,rdates)
+wind_plotter(wind_ax,dates,p_storm,storm_strength)
 
 if OUTPUT:
     plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".png",dpi=150)
