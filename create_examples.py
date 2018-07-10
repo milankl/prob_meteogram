@@ -4,7 +4,7 @@ sys.path.append(HERE_PATH)
 
 locations = ["Santiago Chile",
             "Kingston Jamaica",
-            "ECMWF Reading",
+            "Oxford UK",
             "Hobart Australia",
             "Fairbanks Alaska"]
 
