@@ -19,6 +19,7 @@ import pytz
 import warnings
 from droplet import droplet
 from wind_sock import wind_sock
+from lightning_bolt import lightning_bolt
 
 # LOCATION ARGUMENT
 tz = tzwhere.tzwhere()
@@ -36,42 +37,6 @@ else:
 def find_closest(x,a):
     """ Finds the closest index in x to a given value a."""
     return np.argmin(abs(x-a))
-
-def add_clouds_to(axis,dates,highcloud,midcloud,lowcloud, interp=True):
-    """ Adds the different types of clouds to a given axis."""
-    # add sun (and moon?)
-    for t in np.arange(len(dates)):
-        idate = datetime.datetime(2018,6,7,12,0)
-        while idate < dates[-1]:
-            #sun = Circle((dates[t], 0.5), 0.2, color='yellow', zorder=0)
-            sun = Ellipse((idate, 0.5), 0.4/2., 0.4, angle=0.0, color='yellow', zorder=0)
-            axis.add_artist(sun)
-            idate = idate + datetime.timedelta(1)
-
-    # interpolate dates (if set)
-    if interp:
-        dates = spline_dates(dates)
-
-    # add mean cloud covers and scale to [0...1]
-    highcloudm = np.median(highcloud,axis=1)
-    midcloudm = np.median(midcloud,axis=1)
-    lowcloudm = np.median(lowcloud,axis=1)
-
-    totalcloud=(highcloudm+midcloudm+lowcloudm)/3.
-    totalcloudhalf=totalcloud/2.
-    lowerbound=-totalcloudhalf+0.5
-    upperbound=totalcloudhalf+0.5
-
-    # don't plot clouds where totalcloud <= e.g. 0.05
-    threshold=0.05
-
-    # highcloud light grey, lowcloud dark grey
-    axis.fill_between(dates, y1=lowerbound, y2=upperbound, color='0.95',zorder=1, alpha=0.8, edgecolor='none',where=totalcloud>=threshold)
-    axis.fill_between(dates, y1=lowerbound, y2=upperbound-highcloudm/3., color='0.7',zorder=2, alpha=0.6, edgecolor='none',where=totalcloud>=threshold)
-    axis.fill_between(dates, y1=lowerbound, y2=lowerbound+lowcloudm/3.,  color='0.4',zorder=3, alpha=0.3, edgecolor='none',where=totalcloud>=threshold)
-    axis.set_facecolor('lightskyblue')
-    axis.set_xlim([dates[0],dates[-1]])
-    axis.set_ylim([0., 1])
 
 def convert_longitude(lon):
     if lon < 0:
@@ -126,7 +91,7 @@ def sunrise_string(loc,date,utcoffset):
     return sunsymb+arrowup+sunrise_str+arrowdn+sunset_str
 
 # READ DATA
-DAT = Dataset(HERE_PATH+"/data/forecast.nc")
+DAT = Dataset(HERE_PATH+"/data/surface.nc")
 DATrain = Dataset(HERE_PATH+"/data/precip.nc")
 
 # grid
@@ -267,7 +232,7 @@ def storm(spd):
     
     # turn into alpha values
     colormat = np.zeros((p_storm.shape[0],4))
-    colormat[:,0] = color[0]         # RGB values of "C0" matplotlib standard
+    colormat[:,0] = color[0]
     colormat[:,1] = color[1]
     colormat[:,2] = color[2]
     
@@ -277,12 +242,45 @@ def storm(spd):
 
 p_storm,storm_strength = storm(spd)
 
+def lightning(lcc,mcc,hcc):
+    # fake some lightning chance
+    tcc = (hcc + mcc + lcc)/3.
+    cthresh = 0.95
+    p_light = np.mean(tcc > cthresh,axis=1)
+    
+    p_light[p_light >= 0.5] = 1.
+    p_light[np.logical_and(p_light >= 0.1,p_light < .5)] = .7
+    p_light[p_light < 0.1] = 0.
+    
+    # turn into alpha values
+    colormat1 = np.zeros((p_light.shape[0],4))
+    colormat1[:,0] = 1.
+    colormat1[:,1] = 1.
+    colormat1[:,2] = 0.
+    
+    colormat1[:,3] = p_light
+    
+    colormat2 = np.zeros((p_light.shape[0],4))
+    colormat2[:,0] = 0.
+    colormat2[:,1] = 0.
+    colormat2[:,2] = 0.
+    
+    colormat2[:,3] = p_light
+    
+    
+    return colormat1,colormat2
+
+p_light1,p_light2 = lightning(lcc,mcc,hcc)
+    
+
 #  axes formatting
 def cloud_ax_format(ax,dates,loc):
     loc_name = loc.address.split(",")[0]
     ax.set_title("Meteogram "+loc_name+" ("+lat_string(loc.latitude)+", "+lon_string(loc.longitude)+")",loc="left",fontweight="bold")
     ax.set_xticks([])
     ax.set_yticks([])
+    ax.set_xlim([dates[0],dates[-1]])
+    ax.set_ylim([-0.2, 1])
 
 def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
     ax.set_xlim(dates[0],dates[-1])
@@ -372,6 +370,40 @@ def wind_ax_format(ax,dates):
     # ax.get_xaxis().set_tick_params(which='minor', direction='in')
     # ax.get_xaxis().set_tick_params(which='major', direction='in')
     ax.set_xticklabels([])
+    
+def clouds_plotter(axis,dates,highcloud,midcloud,lowcloud, interp=True):
+    """ Adds the different types of clouds to a given axis."""
+    # add sun (and moon?)
+    for t in np.arange(len(dates)):
+        idate = datetime.datetime(2018,6,7,12,0)
+        while idate < dates[-1]:
+            #sun = Circle((dates[t], 0.5), 0.2, color='yellow', zorder=0)
+            sun = Ellipse((idate, 0.5), 0.4/2., 0.5, angle=0.0, color='yellow', zorder=0)
+            axis.add_artist(sun)
+            idate = idate + datetime.timedelta(1)
+
+    # interpolate dates (if set)
+    if interp:
+        dates = spline_dates(dates)
+
+    # add mean cloud covers and scale to [0...1]
+    highcloudm = np.median(highcloud,axis=1)
+    midcloudm = np.median(midcloud,axis=1)
+    lowcloudm = np.median(lowcloud,axis=1)
+
+    totalcloud=(highcloudm+midcloudm+lowcloudm)/3.
+    totalcloudhalf=totalcloud/2.
+    lowerbound=-totalcloudhalf+0.5
+    upperbound=totalcloudhalf+0.5
+
+    # don't plot clouds where totalcloud <= e.g. 0.05
+    threshold=0.05
+
+    # highcloud light grey, lowcloud dark grey
+    axis.fill_between(dates, y1=lowerbound, y2=upperbound, color='0.95',zorder=1, alpha=0.8, edgecolor='none',where=totalcloud>=threshold)
+    axis.fill_between(dates, y1=lowerbound, y2=upperbound-highcloudm/3., color='0.7',zorder=2, alpha=0.6, edgecolor='none',where=totalcloud>=threshold)
+    axis.fill_between(dates, y1=lowerbound, y2=lowerbound+lowcloudm/3.,  color='0.4',zorder=3, alpha=0.3, edgecolor='none',where=totalcloud>=threshold)
+    axis.set_facecolor('lightskyblue')
 
 
 def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',alpha=0.09):
@@ -415,7 +447,7 @@ def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)
     dropletpath = droplet(rot=-30)
 
     # light rain
-    rain_ax.scatter([d for d in rdates],np.zeros_like(rdates),dsize*0.9,color=lightrain,marker=dropletpath)
+    rain_ax.scatter(rdates,np.zeros_like(rdates),dsize*0.9,color=lightrain,marker=dropletpath)
     
     # medium rain
     rain_ax.scatter([d+dt for d in rdates],1.05+np.zeros_like(rdates),dsize,color=medrain,marker=dropletpath)
@@ -440,6 +472,11 @@ def wind_plotter(ax,dates,p_storm,storm_strength,tminmax):
     ax.scatter([d for q,d in zip(q1,dates) if q],np.ones_like(dates)[q1]*y0+(y1-y0)*0.04,350,color=p_storm[q1,:],marker=windsock_medi)
     ax.scatter([d for q,d in zip(q2,dates) if q],np.ones_like(dates)[q2]*y0+(y1-y0)*0.04,400,color=p_storm[q2,:],marker=windsock_stro)
     
+def lightning_plotter(ax,dates,p_light1,p_light2):
+    boltpath = lightning_bolt()
+    #ax.scatter(dates,0.1*np.ones_like(dates),80,marker=boltpath,color=p_light2,zorder=4)
+    ax.scatter(dates,0.1*np.ones_like(dates),80,marker=boltpath,color=p_light1,zorder=5)
+    
     
 # PLOTTING
 fig = plt.figure(figsize=(10,4))
@@ -458,9 +495,10 @@ rain_ax_format(rain_ax,dates,rain_explanation)
 temp_ax_format(temp_ax,tminmax,dates,utcoffset)
 
 temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
-add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
+clouds_plotter(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
 rain_plotter(rain_ax,lightrain,medrain,heavyrain,rdates)
 wind_plotter(temp_ax,dates,p_storm,storm_strength,tminmax)
+lightning_plotter(cloud_ax,dates,p_light1,p_light2)
 
 if OUTPUT:
     plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".png",dpi=150)
