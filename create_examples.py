@@ -8,7 +8,17 @@ locations = ["Santiago Chile",
             "Hobart Australia",
             "Fairbanks Alaska",
             "Cape Town South Africa",
-            "Rio de Janeiro Brazil"]
+            "Rio de Janeiro Brazil",
+            "Porto Portugal",
+            "Honolulu Hawaii",
+            "Hong Kong",
+            "Moscow Russia",
+            "Longyearbyen Svalbard",
+            "Delhi India",
+            "Rome Italy",
+            "Accra Ghana",
+            "Teheran Iran",
+            "Christchurch New Zealand"]
 
 for loc in locations:
     os.system("python meteogram.py '"+loc+"' 1")
