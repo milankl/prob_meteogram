@@ -28,6 +28,7 @@ if len(sys.argv) > 1:
     OUTPUT = sys.argv[2]
 else:
     LOC_ARG = "Rio de Janeiro Brazil"
+    LOC_ARG = "Kingston Jamaica"
     OUTPUT = 0
 
 
@@ -314,21 +315,31 @@ def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
 
 def temp_ax_format(ax,tminmax,dates,utcoffset):
     ax.text(0.01,0.92,sunrise_string(loc,dates[0],utcoffset),fontsize=10,transform=ax.transAxes)
-    ax.set_yticks(np.arange(np.round(tminmax[0])-3,np.round(tminmax[1])+3,3))
+    
+    td = tminmax[1]-tminmax[0]
+    if td >= 13.:
+        ddegree = 3
+    elif td < 13. and td >= 5.:
+        ddegree = 2
+    else:
+        ddegree = 1
+    
+    ax.set_yticks(np.arange(np.round(tminmax[0])-3,np.round(tminmax[1])+3,ddegree))
     ax.set_ylim(np.round(tminmax[0])-3,np.round(tminmax[1])+3)
     ax.yaxis.set_major_formatter(FormatStrFormatter('%d'+u'\N{DEGREE SIGN}'+'C'))
 
     # x axis lims, ticks, labels
     ax.set_xlim(dates[0],dates[-1])
-    ax.xaxis.set_minor_locator(HourLocator(np.arange(0, 25, 6)))    # minor
+    ax.xaxis.set_minor_locator(HourLocator(np.arange(6, 25, 6)))    # minor
     ax.xaxis.set_minor_formatter(DateFormatter("%Hh"))
-    ax.get_xaxis().set_tick_params(which='minor', direction='in',pad=-10,labelsize=6)
+    ax.get_xaxis().set_tick_params(which='minor', direction='out',pad=2,labelsize=6)
     ax.grid(alpha=0.2)
 
     # major weekdays not weekend in black
     ax.xaxis.set_major_locator(WeekdayLocator(byweekday=range(5)))
     ax.xaxis.set_major_formatter(DateFormatter(" %a\n %d %b"))
     plt.setp(ax.get_xticklabels(), ha="left")
+    ax.get_xaxis().set_tick_params(which='major', direction='out',pad=10,labelsize=10)
     
     # major weekends in blue
     ax_weekend = ax.twiny()                             
@@ -337,6 +348,7 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
     ax_weekend.xaxis.set_major_formatter(DateFormatter(" %a\n %d %b"))
     ax_weekend.xaxis.tick_bottom()
     plt.setp(ax_weekend.get_xticklabels(), ha="left", color="C0")
+    ax_weekend.get_xaxis().set_tick_params(which='major', direction='out',pad=10,labelsize=10)
     ax_weekend.grid(alpha=0.2)
     
     # remove labels at edges
@@ -348,8 +360,8 @@ def temp_ax_format(ax,tminmax,dates,utcoffset):
     
     #ax.get_xticklabels()[2].set_color("C0") #TODO make automatic
     #ax.get_xticklabels()[3].set_color("C0")
-    ax.get_xticklabels(which="minor")[-1].set_visible(False)
-    ax.get_xticklabels(which="minor")[0].set_visible(False)
+    #ax.get_xticklabels(which="minor")[-1].set_visible(False)
+    #ax.get_xticklabels(which="minor")[0].set_visible(False)
 
 def wind_ax_format(ax,dates):
     ax.set_xlim(dates[0],dates[-1])
@@ -414,31 +426,29 @@ def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)
     rain_ax.scatter([d+dt for d in rdates],1.87+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
     rain_ax.scatter([d-2.2*dt for d in rdates],1.95+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
 
-def wind_plotter(ax,dates,p_storm,storm_strength):
+def wind_plotter(ax,dates,p_storm,storm_strength,tminmax):
     
-    windsock_weak = wind_sock(rot=60)
-    windsock_medi = wind_sock(rot=75)
+    windsock_weak = wind_sock(rot=50)
+    windsock_medi = wind_sock(rot=70)
     windsock_stro = wind_sock(rot=90)
     
     q0,q1,q2 = storm_strength       # for readability
     
-    ax.scatter([d for q,d in zip(q0,dates) if q],np.ones_like(dates)[q0],400,color=p_storm[q0,:],marker=windsock_weak)
-    ax.scatter([d for q,d in zip(q1,dates) if q],np.ones_like(dates)[q1],400,color=p_storm[q1,:],marker=windsock_medi)
-    ax.scatter([d for q,d in zip(q2,dates) if q],np.ones_like(dates)[q2],400,color=p_storm[q2,:],marker=windsock_stro)
+    y0,y1 = ax.get_ylim()
     
-    if np.sum(storm_strength) == 0:
-        ax.text(0.995,0.05,"no strong winds expected",fontsize=8,transform=ax.transAxes,ha="right")
+    ax.scatter([d for q,d in zip(q0,dates) if q],np.ones_like(dates)[q0]*y0+(y1-y0)*0.04,300,color=p_storm[q0,:],marker=windsock_weak)
+    ax.scatter([d for q,d in zip(q1,dates) if q],np.ones_like(dates)[q1]*y0+(y1-y0)*0.04,350,color=p_storm[q1,:],marker=windsock_medi)
+    ax.scatter([d for q,d in zip(q2,dates) if q],np.ones_like(dates)[q2]*y0+(y1-y0)*0.04,400,color=p_storm[q2,:],marker=windsock_stro)
     
     
 # PLOTTING
 fig = plt.figure(figsize=(10,4))
 
 # subplots adjust
-all_ax = gridspec.GridSpec(4, 1, height_ratios=[1,2,1,6],hspace=0)
+all_ax = gridspec.GridSpec(3, 1, height_ratios=[1,2,6],hspace=0)
 cloud_ax = plt.subplot(all_ax[0])
 rain_ax = plt.subplot(all_ax[1])
-wind_ax = plt.subplot(all_ax[2])
-temp_ax = plt.subplot(all_ax[3])
+temp_ax = plt.subplot(all_ax[2])
 
 plt.tight_layout(rect=[0.02,.03,1,0.97])
 
@@ -446,12 +456,11 @@ plt.tight_layout(rect=[0.02,.03,1,0.97])
 cloud_ax_format(cloud_ax,dates,loc)
 rain_ax_format(rain_ax,dates,rain_explanation)
 temp_ax_format(temp_ax,tminmax,dates,utcoffset)
-wind_ax_format(wind_ax,dates)
 
 temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
 add_clouds_to(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
 rain_plotter(rain_ax,lightrain,medrain,heavyrain,rdates)
-wind_plotter(wind_ax,dates,p_storm,storm_strength)
+wind_plotter(temp_ax,dates,p_storm,storm_strength,tminmax)
 
 if OUTPUT:
     plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".png",dpi=150)

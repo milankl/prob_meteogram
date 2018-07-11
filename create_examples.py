@@ -6,7 +6,9 @@ locations = ["Santiago Chile",
             "Kingston Jamaica",
             "Oxford UK",
             "Hobart Australia",
-            "Fairbanks Alaska"]
+            "Fairbanks Alaska",
+            "Cape Town South Africa",
+            "Rio de Janeiro Brazil"]
 
 for loc in locations:
     os.system("python meteogram.py '"+loc+"' 1")
