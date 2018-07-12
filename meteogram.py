@@ -156,9 +156,8 @@ numdates = date2num(dates)
 
 # temperature
 t = np.sort(t)                  # sort temperature by ensemble members
-t_mean = np.median(t, axis=1)   # ensemble median
+tmedian = np.median(t, axis=1)   # ensemble median
 tminmax = (t.min(),t.max())     # used for axis formatting
-t_mean_spline = interp1d(numdates, t_mean, kind='cubic')
 
 # interpolation of data
 def spline_data_by_date(data, numdates=numdates, resolution=SPLINE_RES):
@@ -175,7 +174,7 @@ mcc_data_spline = spline_data_by_date(mcc)
 hcc_data_spline = spline_data_by_date(hcc)
 
 # calculate precipitation probability
-def rain_prob(lsp,color=[0.12,0.47,0.71]):
+def rain_prob(lsp,color=[0.,0.17,0.41]):
     # in mm
     bins = np.array([min(0,lsp.min()),0.05,0.5,1,max(2,lsp.max())]) 
     
@@ -242,7 +241,7 @@ def storm(spd):
 
 p_storm,storm_strength = storm(spd)
 
-def lightning(lcc,mcc,hcc):
+def lightning(lcc,mcc,hcc,tmedian):
     # fake some lightning chance
     tcc = (hcc + mcc + lcc)/3.
     cthresh = 0.95
@@ -252,26 +251,28 @@ def lightning(lcc,mcc,hcc):
     p_light[np.logical_and(p_light >= 0.1,p_light < .5)] = .7
     p_light[p_light < 0.1] = 0.
     
+    # only for warm temperaturs
+    p_light[tmedian < 20] = 0.
+    
     # turn into alpha values
-    colormat1 = np.zeros((p_light.shape[0],4))
-    colormat1[:,0] = 1.
-    colormat1[:,1] = 1.
-    colormat1[:,2] = 0.
+    colormat = np.zeros((p_light.shape[0],4))
+    colormat[:,0] = 1.
+    colormat[:,1] = 1.
+    colormat[:,2] = 0.
     
-    colormat1[:,3] = p_light
-    
-    colormat2 = np.zeros((p_light.shape[0],4))
-    colormat2[:,0] = 0.
-    colormat2[:,1] = 0.
-    colormat2[:,2] = 0.
-    
-    colormat2[:,3] = p_light
+    colormat[:,3] = p_light
     
     
-    return colormat1,colormat2
+    return colormat
 
-p_light1,p_light2 = lightning(lcc,mcc,hcc)
-    
+p_light = lightning(lcc,mcc,hcc,tmedian)
+
+def snow_or_rain(tmedian):
+    # fake snow information based on temperature
+    snow = tmedian[:-1] < 0     # precipitation has one time step less
+    return snow
+
+snow = snow_or_rain(tmedian)    
 
 #  axes formatting
 def cloud_ax_format(ax,dates,loc):
@@ -282,7 +283,7 @@ def cloud_ax_format(ax,dates,loc):
     ax.set_xlim([dates[0],dates[-1]])
     ax.set_ylim([-0.2, 1])
 
-def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
+def rain_ax_format(ax,dates,rain_explanation,snow,dsize=78,dstring=(2,0,45)):
     ax.set_xlim(dates[0],dates[-1])
     ax.set_ylim(-0.5,2.5)
     ax.set_yticks([])
@@ -297,18 +298,29 @@ def rain_ax_format(ax,dates,rain_explanation,dsize=78,dstring=(2,0,45)):
     
     bg_rect = Rectangle((0.84,0),0.16,1.,linewidth=.3,edgecolor='k',facecolor='w',transform=ax.transAxes,zorder=2)
     ax.add_patch(bg_rect)
+
+    # distinguish between rain and snow
+    if np.all(snow):     # only snowfall    
+        ax.scatter([0.917,0.917],[0.25,0.5],dsize*0.6,color=rain_explanation,transform=ax.transAxes,marker=(6,2,0),zorder=3)
+        ax.text(0.992,0.70,"snowfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="right")
+        ax.text(0.992,0.45,"very likely",fontsize=8,transform=ax.transAxes,ha="right")
+        ax.text(0.992,0.2,"less likely",fontsize=8,transform=ax.transAxes,ha="right")
+    elif np.all(~snow):     # only rainfall
+        ax.scatter([0.917,0.917],[0.25,0.5],dsize,color=rain_explanation,transform=ax.transAxes,marker=droplet(rot=-30),zorder=3)
+        ax.text(0.992,0.70,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="right")
+        ax.text(0.992,0.45,"very likely",fontsize=8,transform=ax.transAxes,ha="right")
+        ax.text(0.992,0.2," less likely",fontsize=8,transform=ax.transAxes,ha="right")
+    else:       # mix of snow and rain
+        ax.scatter([0.919,0.919],[0.16,0.41],dsize,color=rain_explanation,transform=ax.transAxes,marker=droplet(rot=-30),zorder=3)
+        ax.scatter([0.914,0.914],[0.24,0.49],dsize*0.42,color=rain_explanation,transform=ax.transAxes,marker=(6,2,0),zorder=3)
+        ax.text(0.992,0.61,"snow or\n rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="right")
+        ax.text(0.992,0.4,"very likely",fontsize=8,transform=ax.transAxes,ha="right")
+        ax.text(0.992,0.15," less likely",fontsize=8,transform=ax.transAxes,ha="right")
     
-    ax.scatter([0.92,0.92],[0.25,0.5],dsize,color=rain_explanation,transform=ax.transAxes,marker=droplet(rot=-30),zorder=3)
-    ax.text(0.93,0.70,"rainfall",fontsize=8,fontweight="bold",transform=ax.transAxes,ha="left")
-    ax.text(0.93,0.45,"very likely",fontsize=8,transform=ax.transAxes,ha="left")
-    ax.text(0.93,0.2,"less likely",fontsize=8,transform=ax.transAxes,ha="left")
-    
-    ax.text(0.84,0.75,"- heavy",fontsize=8,transform=ax.transAxes,ha="left")
-    ax.text(0.84,0.43,"- medium",fontsize=8,transform=ax.transAxes,ha="left")
-    ax.text(0.84,0.11,"- light",fontsize=8,transform=ax.transAxes,ha="left")
-    
-    #ax.yaxis.set_ticks(np.arange(3))
-    #ax.set_yticklabels(('light','medium','heavy'), fontsize=8)
+    ax.text(0.84,0.75,u"\u25B8 heavy",fontsize=8,transform=ax.transAxes,ha="left")
+    ax.text(0.84,0.43,u"\u25B8 medium",fontsize=8,transform=ax.transAxes,ha="left")
+    ax.text(0.84,0.11,u"\u25B8 light",fontsize=8,transform=ax.transAxes,ha="left")
+
     
 
 def temp_ax_format(ax,tminmax,dates,utcoffset):
@@ -406,7 +418,7 @@ def clouds_plotter(axis,dates,highcloud,midcloud,lowcloud, interp=True):
     axis.set_facecolor('lightskyblue')
 
 
-def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',alpha=0.09):
+def temp_plotter(ax, dates, t_data_spline, tminmax,color='white',alpha=0.09):
     
     # these temperatures will be associated with the lower and upper end of the colormap
     clev = [-5,32]
@@ -421,7 +433,6 @@ def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',
     ax.contourf([dates[0],dates[-1]],[tmin,clev[0]],cmat_low,128,vmin=clev[0],vmax=clev[1],cmap=cmap)
     
     numtime = date2num(spline_dates(dates))
-    mean = t_mean_spline(numtime)
     
     #TODO compare to 1std, 2std whether luminace data is representative
     
@@ -441,22 +452,35 @@ def temp_plotter(ax, dates, t_mean_spline, t_data_spline, tminmax,color='white',
     ax.fill_between(numtime,t_data_spline[:,-1],ylim[1]*np.ones(n_tsteps),facecolor=color,alpha=1.)
     
 
-def rain_plotter(ax,lightrain,medrain,heavyrain,rdates,dsize=78,dstring=(2,0,45)):
+def rain_plotter(ax,lightrain,medrain,heavyrain,snow,rdates,dsize=78,ssize=55,dstring=(2,0,45)):
 
     dt = datetime.timedelta(hours=0.9) #used to shift symbols left/right
     dropletpath = droplet(rot=-30)
+    snowmarker = (6,2,0)
 
+    # light snow
+    ax.scatter([d for d,s in zip(rdates,snow) if s],np.zeros_like(rdates)[snow],ssize*0.8,color=lightrain[snow,:],marker=snowmarker)
+    
     # light rain
-    rain_ax.scatter(rdates,np.zeros_like(rdates),dsize*0.9,color=lightrain,marker=dropletpath)
+    ax.scatter([d for d,s in zip(rdates,snow) if ~s],np.zeros_like(rdates)[~snow],dsize*0.9,color=lightrain[~snow,:],marker=dropletpath)
+    
+    # medium snow
+    ax.scatter([d+1.3*dt for d,s in zip(rdates,snow) if s],1.06+np.zeros_like(rdates)[snow],ssize,color=medrain[snow,:],marker=snowmarker)
+    ax.scatter([d-1.3*dt for d,s in zip(rdates,snow) if s],0.94+np.zeros_like(rdates)[snow],ssize,color=medrain[snow,:],marker=snowmarker)
     
     # medium rain
-    rain_ax.scatter([d+dt for d in rdates],1.05+np.zeros_like(rdates),dsize,color=medrain,marker=dropletpath)
-    rain_ax.scatter([d-dt for d in rdates],0.95+np.zeros_like(rdates),dsize,color=medrain,marker=dropletpath)
+    ax.scatter([d+dt for d,s in zip(rdates,snow) if ~s],1.05+np.zeros_like(rdates)[~snow],dsize,color=medrain[~snow,:],marker=dropletpath)
+    ax.scatter([d-dt for d,s in zip(rdates,snow) if ~s],0.95+np.zeros_like(rdates)[~snow],dsize,color=medrain[~snow,:],marker=dropletpath)
+    
+    # heavy snow
+    ax.scatter([d-0.6*dt for d,s in zip(rdates,snow) if s],2.18+np.zeros_like(rdates)[snow],ssize,color=heavyrain[snow,:],marker=snowmarker)
+    ax.scatter([d+1.3*dt for d,s in zip(rdates,snow) if s],1.88+np.zeros_like(rdates)[snow],ssize*0.9,color=heavyrain[snow,:],marker=snowmarker)
+    ax.scatter([d-1.3*dt for d,s in zip(rdates,snow) if s],1.78+np.zeros_like(rdates)[snow],ssize*0.8,color=heavyrain[snow,:],marker=snowmarker)
     
     # heavy rain
-    rain_ax.scatter([d for d in rdates],2.1+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
-    rain_ax.scatter([d+dt for d in rdates],1.87+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
-    rain_ax.scatter([d-2.2*dt for d in rdates],1.95+np.zeros_like(rdates),dsize*1.1,color=heavyrain,marker=dropletpath)
+    ax.scatter([d for d,s in zip(rdates,snow) if ~s],2.1+np.zeros_like(rdates)[~snow],dsize*1.1,color=heavyrain[~snow,:],marker=dropletpath)
+    ax.scatter([d+dt for d,s in zip(rdates,snow) if ~s],1.87+np.zeros_like(rdates)[~snow],dsize*1.1,color=heavyrain[~snow,:],marker=dropletpath)
+    ax.scatter([d-2.2*dt for d,s in zip(rdates,snow) if ~s],1.95+np.zeros_like(rdates)[~snow],dsize*1.1,color=heavyrain[~snow,:],marker=dropletpath)
 
 def wind_plotter(ax,dates,p_storm,storm_strength,tminmax):
     
@@ -472,10 +496,9 @@ def wind_plotter(ax,dates,p_storm,storm_strength,tminmax):
     ax.scatter([d for q,d in zip(q1,dates) if q],np.ones_like(dates)[q1]*y0+(y1-y0)*0.04,350,color=p_storm[q1,:],marker=windsock_medi)
     ax.scatter([d for q,d in zip(q2,dates) if q],np.ones_like(dates)[q2]*y0+(y1-y0)*0.04,400,color=p_storm[q2,:],marker=windsock_stro)
     
-def lightning_plotter(ax,dates,p_light1,p_light2):
+def lightning_plotter(ax,dates,p_light):
     boltpath = lightning_bolt()
-    #ax.scatter(dates,0.1*np.ones_like(dates),80,marker=boltpath,color=p_light2,zorder=4)
-    ax.scatter(dates,0.1*np.ones_like(dates),80,marker=boltpath,color=p_light1,zorder=5)
+    ax.scatter(dates,0.1*np.ones_like(dates),80,marker=boltpath,color=p_light,zorder=5)
     
     
 # PLOTTING
@@ -491,17 +514,17 @@ plt.tight_layout(rect=[0.02,.03,1,0.97])
 
 # do axes formatting
 cloud_ax_format(cloud_ax,dates,loc)
-rain_ax_format(rain_ax,dates,rain_explanation)
+rain_ax_format(rain_ax,dates,rain_explanation,snow)
 temp_ax_format(temp_ax,tminmax,dates,utcoffset)
 
-temp_plotter(temp_ax, dates, t_mean_spline, t_data_spline, tminmax)
+temp_plotter(temp_ax, dates, t_data_spline, tminmax)
 clouds_plotter(cloud_ax,dates,hcc_data_spline,mcc_data_spline,lcc_data_spline)
-rain_plotter(rain_ax,lightrain,medrain,heavyrain,rdates)
+rain_plotter(rain_ax,lightrain,medrain,heavyrain,snow,rdates)
 wind_plotter(temp_ax,dates,p_storm,storm_strength,tminmax)
-lightning_plotter(cloud_ax,dates,p_light1,p_light2)
+lightning_plotter(cloud_ax,dates,p_light)
 
 if OUTPUT:
-    plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".png",dpi=150)
+    plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".png",dpi=300)
     plt.close(fig)
 else:
     plt.show()
