@@ -121,6 +121,8 @@ except:         # no internet connection or server request failed
 lati = find_closest(lat,loc.latitude)   # index for given location
 loni = find_closest(lon,convert_longitude(loc.longitude))
 
+print((lat[lati],lon[loni]))
+
 # shift dates according to timezone
 try:
     utcoffset = timezone_offset(loc,dates[0])
@@ -176,7 +178,8 @@ hcc_data_spline = spline_data_by_date(hcc)
 # calculate precipitation probability
 def rain_prob(lsp,color=[0.,0.17,0.41]):
     # in mm
-    bins = np.array([min(0,lsp.min()),0.05,0.5,1,max(2,lsp.max())]) 
+    rthresh = [0.05,0.5,4.,10.]      # light, medium, heavy+very heavy
+    bins = np.array([min(0,lsp.min()),rthresh[0],rthresh[1],rthresh[2],max(rthresh[3],lsp.max())]) 
     
     # preallocate probablity per rainfall category
     P = np.empty((len(bins)-1,len(rdates)))                  
