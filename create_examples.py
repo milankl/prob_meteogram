@@ -18,6 +18,27 @@ locations = ["Santiago Chile",
             "Accra Ghana",
             "Teheran Iran",
             "Christchurch New Zealand"]
+            
+# locations = ["Istanbul Turkey",
+#             "Vancouver Canada",
+#             "San Francisco USA",
+#             "Chicago USA",
+#             "Miami USA",
+#             "Lima Peru",
+#             "New York USA",
+#             "Reykjavik Iceland",
+#             "Nairobi Kenia",
+#             "Astana Kasachstan",
+#             "Kathmandu Nepal",
+#             "Seoul South Korea",
+#             "Yakutsk Russia",
+#             "Syndey Australia",
+#             "Perth Australia",
+#             "Auckland New Zealand",
+#             "Stockholm Sweden",
+#             "Copenhagen Denmark",
+#             "Hamburg Germany",
+#             "Prague Czech Republic"]
 
 for loc in locations:
     os.system("python meteogram.py '"+loc+"' 1")
