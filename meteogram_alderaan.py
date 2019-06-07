@@ -1,10 +1,7 @@
-import os, sys, inspect
-HERE_PATH = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-sys.path.append(HERE_PATH)
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.dates import WeekdayLocator, DayLocator, HourLocator, DateFormatter, drange, date2num, num2date
+from matplotlib.colors import LinearSegmentedColormap 
 from netCDF4 import Dataset
 from matplotlib.ticker import FormatStrFormatter
 import datetime
@@ -12,7 +9,7 @@ from matplotlib import gridspec
 from scipy.interpolate import interp1d
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from matplotlib.collections import PatchCollection
-from geopy.geocoders import Nominatim
+#from geopy.geocoders import Nominatim
 from sunrise import sun
 from tzwhere import tzwhere
 import pytz
@@ -21,16 +18,7 @@ from droplet import droplet
 from wind_sock import wind_sock
 from lightning_bolt import lightning_bolt
 
-# LOCATION ARGUMENT
 tz = tzwhere.tzwhere()
-
-if len(sys.argv) > 1:
-    LOC_ARG = sys.argv[1]
-    OUTPUT = sys.argv[2]
-else:
-    LOC_ARG = "Rio de Janeiro Brazil"
-    OUTPUT = 0
-
 
 ## FUNCTIONS
 def find_closest(x,a):
@@ -90,59 +78,40 @@ def sunrise_string(loc,date,utcoffset):
     return sunsymb+arrowup+sunrise_str+arrowdn+sunset_str
 
 # READ DATA
-DAT = Dataset(HERE_PATH+"/data/surface.nc")
-DATrain = Dataset(HERE_PATH+"/data/precip.nc")
+time = np.load("data/time.npz")["arr_0"]
 
-# grid
-lat = DAT.variables["latitude"][:]
-lon = DAT.variables["longitude"][:]
-time = DAT.variables["time"][:]
+t = np.load("data/temperature.npz")["arr_0"]
+lcc = np.load("data/low_clouds.npz")["arr_0"]
+mcc = np.load("data/medium_clouds.npz")["arr_0"]
+hcc = np.load("data/high_clouds.npz")["arr_0"]
+lsp = np.load("data/precip.npz")["arr_0"]
+u = np.load("data/uwind.npz")["arr_0"]
+v = np.load("data/vwind.npz")["arr_0"]
 
 # convert time to datetime objects
 datetime0 = datetime.datetime(1900,1,1)
 dates = [datetime0 + datetime.timedelta(hours=int(t)) for t in time]
    
-# PICK LOCATION based on geopy
-loc_search = LOC_ARG
-
-geolocator = Nominatim()
-try:
-    loc = geolocator.geocode(loc_search)
-except:         # no internet connection or server request failed
-    class loc_default:
-        latitude = -22.9
-        longitude = -43.2
-        address = "Rio de Janeiro, Brazil"
+# PICK LOCATION
+class loc_default:
+    latitude = -33.4
+    longitude = -70.7
+    address = "Alderaan City, Alderaan"
     
-    loc = loc_default()
-    warnings.warn("Geolocation failed. Use "+loc.address+" instead.")
-
-lati = find_closest(lat,loc.latitude)   # index for given location
-loni = find_closest(lon,convert_longitude(loc.longitude))
-
-print((lat[lati],lon[loni]))
+loc = loc_default()
 
 # shift dates according to timezone
-try:
-    utcoffset = timezone_offset(loc,dates[0])
-except:
-    warnings.warn("No timezone found. Use UTC instead")
-    utcoffset = datetime.timedelta(0)
+# try:
+utcoffset = timezone_offset(loc,dates[0])
+# except:
+#     warnings.warn("No timezone found. Use UTC instead")
+#     utcoffset = datetime.timedelta(0)
 
 dates = [d+utcoffset for d in dates]
 
 # shifted datevector for rain
 three_hours = datetime.timedelta(hours=3)
 rdates = [d+three_hours for d in dates[:-1]]
-
-# extract data for given location
-t = DAT.variables["t2m"][:,:,lati,loni]-273.15      # Kelvin to degC
-u = DAT.variables["u10"][:,:,lati,loni]
-v = DAT.variables["v10"][:,:,lati,loni]
-lcc = DAT.variables["lcc"][:,:,lati,loni]
-mcc = DAT.variables["mcc"][:,:,lati,loni]
-hcc = DAT.variables["hcc"][:,:,lati,loni]
-lsp = DATrain.variables["lsp"][:,:,lati,loni]*1e4       # only large-scale precip...
 
 # smooth and mean data
 SPLINE_RES = 360
@@ -245,8 +214,8 @@ p_storm,storm_strength = storm(spd)
 
 def lightning(lcc,mcc,hcc,tmedian):
     # fake some lightning chance
-    tcc = (hcc + mcc + lcc)/3.
-    cthresh = 0.95
+    tcc = (0.5*mcc + 2*lcc)/3.
+    cthresh = 0.3
     p_light = np.mean(tcc > cthresh,axis=1)
     
     p_light[p_light >= 0.5] = 1.
@@ -254,7 +223,7 @@ def lightning(lcc,mcc,hcc,tmedian):
     p_light[p_light < 0.1] = 0.
     
     # only for warm temperaturs
-    p_light[tmedian < 20] = 0.
+    p_light[tmedian < 16] = 0.
     
     # turn into alpha values
     colormat = np.zeros((p_light.shape[0],4))
@@ -420,12 +389,12 @@ def clouds_plotter(axis,dates,highcloud,midcloud,lowcloud, interp=True):
     axis.set_facecolor('lightskyblue')
 
 
-def temp_plotter(ax, dates, t_data_spline, tminmax,color='white',alpha=0.09):
+def temp_plotter(ax, dates, t_data_spline, tminmax,color='white',alpha=0.08):
     
     # these temperatures will be associated with the lower and upper end of the colormap
-    clev = [-5,32]
+    clev = [-10,20]
     tmin,tmax = (-100,100)   # absurdly low and high temperatures  
-    cmap = "jet"
+    cmap = "rainbow"
     cmat = [[clev[0],clev[0]],[clev[1],clev[1]]]
     cmat_high = clev[1]*np.ones((2,2))
     cmat_low = clev[0]*np.ones((2,2))
@@ -503,7 +472,7 @@ def lightning_plotter(ax,dates,p_light):
     ax.scatter(dates,0.1*np.ones_like(dates),80,marker=boltpath,color=p_light,zorder=5)
     
     
-# PLOTTING
+## PLOTTING
 fig = plt.figure(figsize=(10,4))
 
 # subplots adjust
@@ -525,8 +494,6 @@ rain_plotter(rain_ax,lightrain,medrain,heavyrain,snow,rdates)
 wind_plotter(temp_ax,dates,p_storm,storm_strength,tminmax)
 lightning_plotter(cloud_ax,dates,p_light)
 
-if OUTPUT:
-    plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".png",dpi=300)
-    plt.close(fig)
-else:
-    plt.show()
+plt.savefig("examples/meteogram_"+loc.address.split(",")[0]+".pdf")
+plt.close(fig)
+
