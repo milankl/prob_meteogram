@@ -19,7 +19,7 @@ can be installed via pip.
 
 # HOW TO USE
 
-This script will create a probabilistc meteogram for a given city or location. Will require ECMWF EPS data in a folder called "/data", which is not provided in this repository. Then do
+This script will create a probabilistc meteogram for a given city or location. Will require ECMWF EPS data in a folder called "/data", which is not provided in this repository due to licensing issues. Then do
 
     python meteogram.py
     
