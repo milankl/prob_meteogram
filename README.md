@@ -1,4 +1,5 @@
 # Intuitive probabilistic meteograms
+![meteogram](examples/meteogram_Alderaan City.png?raw=true "Meteogram")
 
 This is a repository intended to develop intuitive probabilistic meteograms for an increased public confidence in weather forecasts. It is based on the ensemble members of an ensemble prediction system and aims to visualize to weather at a given location in a way that is easy to understand for everybody.
 
