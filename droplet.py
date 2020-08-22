@@ -52,3 +52,16 @@ def droplet(xy=(0.0, 0.0), width=0.4, height=1.0, rot=0.0):
     ]
 
     return Path(verts, codes)
+
+
+if __name__ == "__main__":
+    fig, ax = plt.subplots()
+    patch = patches.PathPatch(droplet(), facecolor="aqua", lw=1)
+    ax.add_patch(patch)
+
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1, 1)
+
+    plt.show()
+    # plt.savefig("droplet.png", dpi=300)
+    # plt.close(fig)

@@ -96,11 +96,14 @@ def wind_sock(xy=(0.0, 0.0), width=0.4, height=0.8, rot=35):
     return Path(verts, codes)
 
 
-# fig,ax = plt.subplots(1,1)
-# patch = patches.PathPatch(wind_sock(), facecolor='C3', lw=1)
-# ax.add_patch(patch)
-#
-# ax.set_xlim(-1,1)
-# ax.set_ylim(-1,1)
-# plt.savefig("wind_sock.png",dpi=300)
-# plt.close(fig)
+if __name__ == "__main__":
+    fig, ax = plt.subplots()
+    patch = patches.PathPatch(wind_sock(), facecolor="C3", lw=1)
+    ax.add_patch(patch)
+
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1, 1)
+
+    plt.show()
+    # plt.savefig("wind_sock.png", dpi=300)
+    # plt.close(fig)

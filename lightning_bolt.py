@@ -30,11 +30,14 @@ def lightning_bolt(xy=(0.0, 0.0), width=0.6, height=1.0, rot=0.0):
     return Path(verts, codes)
 
 
-# fig,ax = plt.subplots(1,1)
-# patch = patches.PathPatch(lightning_bolt(), facecolor='yellow', lw=1)
-# ax.add_patch(patch)
-#
-# ax.set_xlim(-1,1)
-# ax.set_ylim(-1,1)
-# plt.savefig("lightning_bolt.png",dpi=300)
-# plt.close(fig)
+if __name__ == "__main__":
+    fig, ax = plt.subplots()
+    patch = patches.PathPatch(lightning_bolt(), facecolor="yellow", lw=1)
+    ax.add_patch(patch)
+
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1, 1)
+
+    plt.show()
+    # plt.savefig("lightning_bolt.png", dpi=300)
+    # plt.close(fig)
