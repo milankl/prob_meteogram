@@ -4,10 +4,7 @@ import matplotlib.patches as patches
 from matplotlib.collections import PatchCollection
 import numpy as np
 
-
-def rotmat(rot):
-    d = 2 * np.pi / 360.0  # assume input in degree
-    return np.array([[np.cos(d * rot), -np.sin(d * rot)], [np.sin(d * rot), np.cos(d * rot)]])
+from .utils import rotmat
 
 
 def wind_sock(xy=(0.0, 0.0), width=0.4, height=0.8, rot=35):
