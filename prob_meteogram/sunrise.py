@@ -3,7 +3,7 @@ from math import degrees as deg, radians as rad
 from datetime import date, datetime, time
 
 
-class sun:
+class Sun:
     """  
     Calculate sunrise and sunset based on equations from NOAA 
     http://www.srrb.noaa.gov/highlights/sunrise/calcdetails.html 
@@ -30,19 +30,19 @@ class sun:
         # if when is None : when = datetime.now(tz=LocalTimezone())
         self.__preptime(when)
         self.__calc()
-        return sun.__timefromdecimalday(self.sunrise_t)
+        return self.__timefromdecimalday(self.sunrise_t)
 
     def sunset(self, when=None):
         # if when is None : when = datetime.now(tz=LocalTimezone())
         self.__preptime(when)
         self.__calc()
-        return sun.__timefromdecimalday(self.sunset_t)
+        return self.__timefromdecimalday(self.sunset_t)
 
     def solarnoon(self, when=None):
         # if when is None : when = datetime.now(tz=LocalTimezone())
         self.__preptime(when)
         self.__calc()
-        return sun.__timefromdecimalday(self.solarnoon_t)
+        return self.__timefromdecimalday(self.solarnoon_t)
 
     @staticmethod
     def __timefromdecimalday(day):
