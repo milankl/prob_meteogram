@@ -135,6 +135,6 @@ class Sun:
 
 
 if __name__ == "__main__":
-    s = sun(lat=52.37, long=4.90)
+    s = Sun(lat=52.37, long=4.90)
     print(datetime.today())
     print(s.sunrise(), s.solarnoon(), s.sunset())
