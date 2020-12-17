@@ -2,6 +2,8 @@
 
 Winner of the *Scipy John Hunter excellence for plotting* contest 2019, [announced at SciPy 2019 conference.](https://twitter.com/SciPyConf/status/1149699985455362048)
 
+M Kloewer, T Rackow and K Donkers.
+
 ![meteogram](examples/meteogram_Alderaan%20City.png?raw=true "Meteogram")
 
 This is a repository intended to develop intuitive probabilistic meteograms for an increased public confidence in weather forecasts. It is based on the ensemble members of an ensemble prediction system and aims to visualize to weather at a given location in a way that is easy to understand for everybody.
